@@ -1,7 +1,14 @@
 lib.locale()
 
-local BlindfoldStates = {}                       -- Table to track blindfold states of players on server side
-local item = Config.BlindfoldItem or 'blindfold' -- Item name from config
+local item = Config.blindfoldItem or 'blindfold' -- Item name from config
+
+local function isBlindfolded(targetId)
+    return Player(targetId).state.isBlindfolded or false
+end
+
+local function setBlindfolded(targetId, value)
+    Player(targetId).state:set('isBlindfolded', value, true) -- replicated so every client (and other resources) can read it directly off the player's state bag
+end
 
 function ServerNotify(target, title, key, type)
     TriggerClientEvent('wz-blindfold:Notify', target, title, key, type)
@@ -29,7 +36,7 @@ lib.callback.register('blindfold:applyBlindfold', function(source, targetId) -- 
     if not targetId or targetId == source then
         return false
     end
-    if BlindfoldStates[targetId] then
+    if isBlindfolded(targetId) then
         return false -- Target is already blindfolded
     end
     if isTargetTooFar(source, targetId) then
@@ -38,8 +45,7 @@ lib.callback.register('blindfold:applyBlindfold', function(source, targetId) -- 
     local hasItem = exports.ox_inventory:Search(source, 'count', item) > 0
     if hasItem then
         exports.ox_inventory:RemoveItem(source, item, 1)
-        BlindfoldStates[targetId] = true
-        TriggerClientEvent('wz-blindfold:applyBlindfold', targetId)
+        setBlindfolded(targetId, true) -- clients react to this via AddStateBagChangeHandler, no manual event needed
         return true
     else
         return false
@@ -51,45 +57,25 @@ lib.callback.register('blindfold:removeBlindfold', function(source, targetId) --
         return false
     end
 
-    if not BlindfoldStates[targetId] then
+    if not isBlindfolded(targetId) then
         return false -- Target is not blindfolded
     end
     if isTargetTooFar(source, targetId) then
         return false -- Target is too far away, cannot remove blindfold
     end
-        if BlindfoldStates[targetId] then
-            BlindfoldStates[targetId] = nil
-            exports.ox_inventory:AddItem(source, item, 1)
-            TriggerClientEvent('wz-blindfold:removeBlindfold', targetId)
-            return true
-        else
-            return false
-        end
-    end)
+    exports.ox_inventory:AddItem(source, item, 1)
+    setBlindfolded(targetId, false)
+    return true
+end)
 
 lib.callback.register('blindfold:removeOwnBlindfold', function(source) -- Callback for a player to remove their own blindfold
-        if BlindfoldStates[source] then
-            BlindfoldStates[source] = nil
-            exports.ox_inventory:AddItem(source, item, 1)
-            TriggerClientEvent('wz-blindfold:removeBlindfold', source)
-            return true
-        else
-            return false
-        end
-    end)
-
-AddEventHandler('playerDropped', function() -- Event handler to clean up blindfold state when a player leaves
-    local src = source
-    if BlindfoldStates[src] then
-        BlindfoldStates[src] = nil -- Clean up state when a player leaves
+    if not isBlindfolded(source) then
+        return false
     end
-end)                               -- Can be used to reapply blindfolds if a player disconnects while blindfolded and then reconnects in the future
-
-lib.callback.register('blindfold:getBlindfoldState',
-    function(source, targetId) -- This callback can be used by the client to check if a player is blindfolded
-        local id = targetId or source
-        return BlindfoldStates[id] or false
-    end)
+    exports.ox_inventory:AddItem(source, item, 1)
+    setBlindfolded(source, false)
+    return true
+end)
 
 -- Admin commands
 
@@ -102,11 +88,10 @@ lib.addCommand('forceblindfold', {
 }, function(source, args)
     local targetId = args.target
     if targetId then
-        if BlindfoldStates[targetId] then
+        if isBlindfolded(targetId) then
             return ServerNotify(source, 'Admin', 'player_already_blindfolded', 'info')
         end
-        BlindfoldStates[targetId] = true
-        TriggerClientEvent('wz-blindfold:applyBlindfold', targetId)
+        setBlindfolded(targetId, true)
         ServerNotify(source, 'Admin', 'player_blindfold_success', 'success')
     else
         ServerNotify(source, 'Admin', 'player_not_found', 'info')
@@ -122,12 +107,11 @@ lib.addCommand('forceunblindfold', {
 }, function(source, args)
     local targetId = args.target
     if targetId then
-        if not BlindfoldStates[targetId] then
+        if not isBlindfolded(targetId) then
             ServerNotify(source, 'Admin', 'player_not_blindfolded', 'info')
             return
         end
-        BlindfoldStates[targetId] = nil
-        TriggerClientEvent('wz-blindfold:removeBlindfold', targetId)
+        setBlindfolded(targetId, false)
         ServerNotify(source, 'Admin', 'player_blindfold_removed_success', 'success')
     else
         ServerNotify(source, 'Admin', 'player_not_found', 'info')
@@ -143,7 +127,7 @@ lib.addCommand('blindfoldstate', {
 }, function(source, args)
     local targetId = args.target
     if targetId then
-        local stateKey = BlindfoldStates[targetId] and "state_blindfolded" or "state_not_blindfolded"
+        local stateKey = isBlindfolded(targetId) and "state_blindfolded" or "state_not_blindfolded"
         ServerNotify(source, 'Admin', stateKey, 'info')
     else
         ServerNotify(source, 'Admin', 'player_not_found', 'info')
@@ -153,20 +137,20 @@ end)
 lib.addCommand('removeblindfold', {
     help = locale('remove_blindfold_command'),
 }, function(source)
-    if BlindfoldStates[source] then
+    if isBlindfolded(source) then
         TriggerClientEvent('wz-blindfold:removeOwnBlindfold', source)
     else
         ServerNotify(source, 'Blindfold', 'self_is_not_blindfolded', 'info')
     end
 end)
 
-
 AddEventHandler('onResourceStop', function(resourceName) -- Clean up blindfold states when the resource stops
-    if GetCurrentResourceName() == resourceName then
-        for playerId, _ in pairs(BlindfoldStates) do
-            TriggerClientEvent('wz-blindfold:removeBlindfold', playerId)
+    if GetCurrentResourceName() ~= resourceName then return end
+    for _, playerId in ipairs(GetPlayers()) do
+        local id = tonumber(playerId)
+        if isBlindfolded(id) then
+            setBlindfolded(id, false) -- state bag change fires the client's AddStateBagChangeHandler, which removes the visuals
         end
-        BlindfoldStates = {} -- Clear all states on resource stop
     end
 end)
 

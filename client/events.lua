@@ -1,9 +1,6 @@
 local IsBlindfolded = false
 
-
--- Net Events --
-
-RegisterNetEvent('wz-blindfold:applyBlindfold', function()
+local function ApplyBlindfoldEffects()
     IsBlindfolded = true
     local ped = PlayerPedId()
 
@@ -36,9 +33,9 @@ RegisterNetEvent('wz-blindfold:applyBlindfold', function()
     }, function()
         return IsBlindfolded -- The controls stay disabled as long as this is true
     end)
-end)
+end
 
-RegisterNetEvent('wz-blindfold:removeBlindfold', function()
+local function RemoveBlindfoldEffects()
     IsBlindfolded = false
     local ped = PlayerPedId()
 
@@ -51,6 +48,17 @@ RegisterNetEvent('wz-blindfold:removeBlindfold', function()
 
     -- 3. Prop (mask)
     RestoreOriginalMask(ped)
+end
+
+-- The server is the sole writer of the `isBlindfolded` player state bag (see server/main.lua).
+-- Reacting to the bag itself, rather than a one-shot net event, means the correct visuals are
+-- (re)applied on resource start/restart too, whatever the current server-side truth is at that moment.
+AddStateBagChangeHandler('isBlindfolded', ('player:' .. GetPlayerServerId(PlayerId())), function(_, _, value)
+    if value then
+        ApplyBlindfoldEffects()
+    else
+        RemoveBlindfoldEffects()
+    end
 end)
 
 

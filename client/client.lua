@@ -13,7 +13,7 @@ function ApplyBlindfold(data)
     end
     
     --check if the target is already blindfolded to prevent stacking effects
-    local isTargetBlindfolded = lib.callback.await('blindfold:getBlindfoldState', false, targetId)
+    local isTargetBlindfolded = Player(targetId).state.isBlindfolded
     if isTargetBlindfolded then
         return Notify('Blindfold', 'player_already_blindfolded', 'info')
     end
@@ -60,7 +60,7 @@ local targetId = GetPlayerServerId(NetworkGetEntityOwner(data.entity))
     return Notify('Blindfold', 'cant_remove_dead', 'info')
 end
 
-local isTargetBlindfolded = lib.callback.await('blindfold:getBlindfoldState', false, targetId)
+local isTargetBlindfolded = Player(targetId).state.isBlindfolded
     if not isTargetBlindfolded then
         return Notify('Blindfold', 'player_not_blindfolded', 'info')
     end
