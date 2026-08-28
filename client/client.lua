@@ -98,7 +98,7 @@ end
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
 
-    local ped = PlayerPedId()
+    local ped = cache.ped
 
     -- 1. Reset Visuals
     ClearTimecycleModifier() 

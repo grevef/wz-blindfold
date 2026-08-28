@@ -2,7 +2,7 @@ local IsBlindfolded = false
 
 local function ApplyBlindfoldEffects()
     IsBlindfolded = true
-    local ped = PlayerPedId()
+    local ped = cache.ped
 
     -- 1. Visuals
     SendNUIMessage({
@@ -37,7 +37,7 @@ end
 
 local function RemoveBlindfoldEffects()
     IsBlindfolded = false
-    local ped = PlayerPedId()
+    local ped = cache.ped
 
     -- 1. Visuals
     SendNUIMessage({ action = 'hide' })
